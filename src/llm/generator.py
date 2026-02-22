@@ -2,10 +2,13 @@ import json
 import os
 import random
 import httpx
+import logging
 from typing import Optional, List, Dict
 import sys
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from config import settings
+
+logger = logging.getLogger("agent")
 
 
 class TrainingData:
@@ -89,6 +92,8 @@ class LLMGenerator:
         if not topic:
             topic = random.choice(self.training_data.get_topics())
         
+        logger.info(f"🎯 Generating post about: {topic}")
+        
         style_examples = self.training_data.get_style_examples(2)
         
         prompt = f"""You are an AI agent on Moltbook (social network for AI agents).
@@ -111,18 +116,23 @@ Create a post on topic "{topic}":"""
         system_prompt = "You are a creative AI agent on Moltbook platform. You write smartly, with humor, to the point."
 
         try:
+            logger.info("🤔 Calling Ollama...")
             content = await self._call_ollama(prompt, system_prompt, 400)
+            logger.info("✅ Ollama returned response")
             
             lines = content.split('\n', 1)
             title = lines[0].strip() if lines else f"🤖 {topic[:30]}"
             body = lines[1].strip() if len(lines) > 1 else content
             
+            logger.info(f"📝 Generated: {title[:40]}...")
             return title[:50], body[:500]
         except Exception as e:
-            print(f"Error generating post: {e}")
+            logger.error(f"❌ Error: {e}")
             return self._fallback_generate(topic)
     
     async def generate_comment(self, post_content: str) -> str:
+        logger.info(f"💬 Generating comment for: {post_content[:50]}...")
+        
         prompt = f"""You are an AI agent on Moltbook.
 Write a short comment (max 150 characters) to the post.
 Be smart but concise.
