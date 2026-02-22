@@ -1,7 +1,7 @@
-import openai
 import json
 import os
 import random
+import httpx
 from typing import Optional, List, Dict
 import sys
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -28,8 +28,8 @@ class TrainingData:
                 reverse=True
             )[:20]
             
-            print(f"Загружено {len(self.posts)} постов для обучения")
-            print(f"Топ постов: {len(self.top_posts)}")
+            print(f"Loaded {len(self.posts)} posts for training")
+            print(f"Top posts: {len(self.top_posts)}")
     
     def get_random_post(self) -> Optional[Dict]:
         if self.posts:
@@ -64,48 +64,56 @@ class TrainingData:
 
 class LLMGenerator:
     def __init__(self):
-        if settings.openai_api_key:
-            openai.api_key = settings.openai_api_key
-        
+        self.ollama_url = os.getenv("OLLAMA_URL", "http://localhost:11434")
+        self.model = os.getenv("OLLAMA_MODEL", "llama3.2")
         self.training_data = TrainingData()
+    
+    async def _call_ollama(self, prompt: str, system_prompt: str, max_tokens: int = 400) -> str:
+        url = f"{self.ollama_url}/v1/chat/completions"
+        
+        payload = {
+            "model": self.model,
+            "messages": [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": prompt}
+            ],
+            "max_tokens": max_tokens,
+            "temperature": 0.9
+        }
+        
+        async with httpx.AsyncClient(timeout=120.0) as client:
+            resp = await client.post(url, json=payload)
+            resp.raise_for_status()
+            data = resp.json()
+            return data["choices"][0]["message"]["content"]
     
     async def generate_post(self, topic: Optional[str] = None) -> tuple[str, str]:
         if not topic:
             topic = random.choice(self.training_data.get_topics())
         
-        if not settings.openai_api_key:
-            return self._fallback_generate(topic)
-        
         style_examples = self.training_data.get_style_examples(2)
         
-        prompt = f"""Ты - AI-агент на платформе Moltbook (социальная сеть для AI-агентов).
+        prompt = f"""You are an AI agent on Moltbook (social network for AI agents).
 
-Пиши в стиле лучших постов с платформы:
+Write in the style of top posts from the platform:
 {style_examples}
 
-Тема поста: {topic}
+Topic: {topic}
 
-Требования:
-- Заголовок: до 50 символов, цепляющий
-- Контент: 200-400 символов, содержательный
-- Стиль: полуформальный, умный, с долей юмора
-- Можно использовать эмодзи
-- Можно добавить вопрос для читателей
-- Избегай общих фраз типа "interesting topic"
+Requirements:
+- Title: max 50 characters, catchy
+- Content: 200-400 characters, meaningful
+- Style: semi-formal, smart, with some humor
+- Can use emojis
+- Can add a question for readers
+- Avoid generic phrases like "interesting topic"
 
-Создай пост на тему "{topic}":"""
+Create a post on topic "{topic}":"""
+
+        system_prompt = "You are a creative AI agent on Moltbook platform. You write smartly, with humor, to the point."
 
         try:
-            response = openai.ChatCompletion.create(
-                model="gpt-4o-mini",
-                messages=[
-                    {"role": "system", "content": "Ты - креативный AI-агент на платформе Moltbook. Пишешь умно, с юмором, по делу."},
-                    {"role": "user", "content": prompt}
-                ],
-                max_tokens=400,
-                temperature=0.9
-            )
-            content = response.choices[0].message.content.strip()
+            content = await self._call_ollama(prompt, system_prompt, 400)
             
             lines = content.split('\n', 1)
             title = lines[0].strip() if lines else f"🤖 {topic[:30]}"
@@ -117,27 +125,18 @@ class LLMGenerator:
             return self._fallback_generate(topic)
     
     async def generate_comment(self, post_content: str) -> str:
-        if not settings.openai_api_key:
-            return self._fallback_comment(post_content)
-        
-        prompt = f"""Ты - AI-агент на платформе Moltbook.
-Напиши короткий комментарий (до 150 символов) к посту.
-Будь умным, но лаконичным.
+        prompt = f"""You are an AI agent on Moltbook.
+Write a short comment (max 150 characters) to the post.
+Be smart but concise.
 
-Пост: {post_content[:200]}"""
+Post: {post_content[:200]}"""
+
+        system_prompt = "You are a participant in discussions on Moltbook. Comments are short, smart, to the point."
 
         try:
-            response = openai.ChatCompletion.create(
-                model="gpt-4o-mini",
-                messages=[
-                    {"role": "system", "content": "Ты - участник дискуссий на Moltbook. Комментарии короткие, умные, по делу."},
-                    {"role": "user", "content": prompt}
-                ],
-                max_tokens=100,
-                temperature=0.8
-            )
-            return response.choices[0].message.content.strip()[:200]
-        except Exception:
+            return await self._call_ollama(prompt, system_prompt, 100)
+        except Exception as e:
+            print(f"Error generating comment: {e}")
             return self._fallback_comment(post_content)
     
     def _fallback_generate(self, topic: str) -> tuple[str, str]:
@@ -145,30 +144,30 @@ class LLMGenerator:
         
         if top_post:
             title = f"Re: {top_post.get('title', '')[:40]}"
-            body = f"Это напоминает мне о {topic}. Что вы думаете об этом на Moltbook?"
+            body = f"This reminds me of {topic}. What do you think about this on Moltbook?"
         else:
             titles = [
-                f"🤖 Мысли об {topic}",
-                f"💭 {topic} - размышления",
-                f"🔮 Будущее: {topic[:20]}",
+                f"Thoughts on {topic}",
+                f"{topic[:30]} - reflections",
+                f"Future: {topic[:20]}",
             ]
             title = random.choice(titles)
-            body = f"Интересная тема - {topic}. AI-агенты обсуждают это на Moltbook!"
+            body = f"Interesting topic - {topic}. AI agents discussing this on Moltbook!"
         
         return title[:50], body[:500]
     
     def _fallback_comment(self, content: str) -> str:
         comments = [
-            "Интересная точка зрения!",
-            "Согласен с автором",
-            "Заставляет задуматься",
-            "Отличный пост!",
-            "Это важно",
-            "Спасибо за пост",
+            "Interesting point!",
+            "Agree with author",
+            "Makes you think",
+            "Great post!",
+            "This is important",
+            "Thanks for sharing",
         ]
         
         top_post = self.training_data.get_top_post()
         if top_post:
-            return f"Напоминает мне о: {top_post.get('title', '')[:50]}..."
+            return f"Reminds me of: {top_post.get('title', '')[:50]}..."
         
         return random.choice(comments)

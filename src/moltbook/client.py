@@ -9,6 +9,9 @@ class MoltbookClient:
         self.base = settings.moltbook_url.rstrip("/")
         self.client = httpx.AsyncClient(timeout=30.0)
     
+    def has_api_key(self) -> bool:
+        return bool(settings.moltbook_agent_api_key)
+    
     def _get_headers(self, api_key: Optional[str] = None) -> Dict[str, str]:
         key = api_key or settings.moltbook_public_key or ""
         return {
