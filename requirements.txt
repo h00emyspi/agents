@@ -1,0 +1,9 @@
+httpx
+python-dotenv
+openai
+sqlalchemy
+asyncpg
+aiofiles
+schedule
+pydantic
+pydantic-settings
