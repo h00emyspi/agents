@@ -4,7 +4,7 @@ from typing import Dict, Any, List
 from sqlalchemy import create_engine, Column, Integer, String, Float, DateTime, Text, JSON
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
-from ..config import settings
+from config import settings
 
 Base = declarative_base()
 
@@ -56,7 +56,11 @@ class AgentStats(Base):
 
 class Database:
     def __init__(self):
-        self.engine = create_engine(settings.database_url.replace("sqlite:///", "sqlite:////"))
+        db_url = settings.database_url
+        if db_url.startswith("sqlite:///"):
+            db_path = db_url.replace("sqlite:///", "")
+            db_url = f"sqlite:///{db_path}"
+        self.engine = create_engine(db_url)
         Base.metadata.create_all(self.engine)
         self.Session = sessionmaker(bind=self.engine)
     

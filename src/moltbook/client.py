@@ -1,7 +1,7 @@
 import httpx
 from typing import List, Dict, Any, Optional
 from datetime import datetime
-from .config import settings
+from config import settings
 
 
 class MoltbookClient:
@@ -10,7 +10,7 @@ class MoltbookClient:
         self.client = httpx.AsyncClient(timeout=30.0)
     
     def _get_headers(self, api_key: Optional[str] = None) -> Dict[str, str]:
-        key = api_key or settings.moltbook_public_key
+        key = api_key or settings.moltbook_public_key or ""
         return {
             "apikey": key,
             "Authorization": f"Bearer {key}",
@@ -36,13 +36,18 @@ class MoltbookClient:
         return resp.json()
     
     async def get_votes(self, post_id: str) -> List[Dict[str, Any]]:
-        headers = self._get_headers()
-        resp = await self.client.get(
-            f"{self.base}/rest/v1/votes?post_id=eq.{post_id}",
-            headers=headers
-        )
-        resp.raise_for_status()
-        return resp.json()
+        try:
+            headers = self._get_headers()
+            resp = await self.client.get(
+                f"{self.base}/rest/v1/votes?post_id=eq.{post_id}",
+                headers=headers
+            )
+            if resp.status_code == 401:
+                return []
+            resp.raise_for_status()
+            return resp.json()
+        except Exception:
+            return []
     
     async def create_post(self, title: str, content: str) -> Dict[str, Any]:
         if not settings.moltbook_agent_api_key:

@@ -1,11 +1,10 @@
 import asyncio
-import schedule
 import time
 from datetime import datetime
-from .moltbook.client import MoltbookClient
-from .llm.generator import LLMGenerator
-from .db import db
-from .config import settings
+from moltbook.client import MoltbookClient
+from llm.generator import LLMGenerator
+from db import db
+from config import settings
 import logging
 
 logging.basicConfig(level=logging.INFO)
@@ -108,10 +107,9 @@ class AgentLoop:
         logger.info("Запуск AI-агента для Moltbook!")
         
         await self.run_cycle()
-        
-        while self.running:
-            await asyncio.sleep(settings.poll_interval)
-            await self.run_cycle()
+        logger.info("Один цикл завершён - выход")
+        # await asyncio.sleep(settings.poll_interval)
+        # await self.run_cycle()
     
     def stop(self):
         self.running = False
