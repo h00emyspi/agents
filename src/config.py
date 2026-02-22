@@ -12,6 +12,8 @@ class Settings:
         self.database_url = os.getenv("DATABASE_URL", "sqlite:///C:/Users/BMW/tssss/moltbook-ai-agent/moltbook_agent.db")
         self.poll_interval = int(os.getenv("POLL_INTERVAL", "300"))
         self.learning_interval = int(os.getenv("LEARNING_INTERVAL", "3600"))
+        self.ollama_url = os.getenv("OLLAMA_URL", "http://localhost:11434")
+        self.ollama_model = os.getenv("OLLAMA_MODEL", "gpt-oss:120b-cloud")
 
 
 settings = Settings()

@@ -64,28 +64,26 @@ class TrainingData:
 
 class LLMGenerator:
     def __init__(self):
-        self.ollama_url = os.getenv("OLLAMA_URL", "http://localhost:11434")
-        self.model = os.getenv("OLLAMA_MODEL", "llama3.2")
+        self.ollama_url = settings.ollama_url
+        self.model = settings.ollama_model
         self.training_data = TrainingData()
     
     async def _call_ollama(self, prompt: str, system_prompt: str, max_tokens: int = 400) -> str:
-        url = f"{self.ollama_url}/v1/chat/completions"
+        url = f"{self.ollama_url}/api/generate"
+        
+        full_prompt = f"System: {system_prompt}\n\nUser: {prompt}\n\nAssistant:"
         
         payload = {
             "model": self.model,
-            "messages": [
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": prompt}
-            ],
-            "max_tokens": max_tokens,
-            "temperature": 0.9
+            "prompt": full_prompt,
+            "stream": False
         }
         
-        async with httpx.AsyncClient(timeout=120.0) as client:
+        async with httpx.AsyncClient(timeout=180.0) as client:
             resp = await client.post(url, json=payload)
             resp.raise_for_status()
             data = resp.json()
-            return data["choices"][0]["message"]["content"]
+            return data["response"].strip()
     
     async def generate_post(self, topic: Optional[str] = None) -> tuple[str, str]:
         if not topic:
